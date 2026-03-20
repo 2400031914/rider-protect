@@ -1,4 +1,5 @@
 # SurakshaPay
+This Phase 1 submission includes a frontend prototype and system design for SurakshaPay, built and refined during the hackathon using modern prototyping tools and custom README/architecture planning.
 ### AI-Powered Parametric Income Protection for Delivery Partners
 
 ## Problem Statement
