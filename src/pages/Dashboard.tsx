@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, CloudRain, Wind, WifiOff, CheckCircle2, Clock, AlertTriangle,
-  IndianRupee, TrendingUp, Bell, ArrowUpRight, Zap, Loader2
+  IndianRupee, TrendingUp, Bell, ArrowUpRight, Zap, Loader2, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/StatCard";
@@ -43,12 +43,27 @@ interface Claim {
   paidVia: string;
 }
 
+interface UserData {
+  name: string;
+  platform: string;
+  zone: string;
+  slots: string;
+}
+
+interface PolicyData {
+  planName: string;
+  premium: number;
+  maxPayout: number;
+  status: string;
+  zoneRisk: string;
+}
+
 const zones = ["Kukatpally, Hyderabad", "Madhapur, Hyderabad", "Gachibowli, Hyderabad", "Andheri East, Mumbai", "Whitefield, Bengaluru"];
 
-const triggerConfigs: Record<string, { severity: string; impact: string; payout: () => number }> = {
-  "Heavy Rain": { severity: "High", impact: "Estimated 3-hour delivery disruption", payout: () => 350 + Math.floor(Math.random() * 150) },
-  "AQI Spike": { severity: "Medium", impact: "AQI crossed 350 — delivery slowdown expected", payout: () => 200 + Math.floor(Math.random() * 120) },
-  "Platform Outage": { severity: "High", impact: `${30 + Math.floor(Math.random() * 30)} mins downtime — orders halted`, payout: () => 250 + Math.floor(Math.random() * 100) },
+const triggerConfigs: Record<string, { severity: string; impactFn: () => string; payout: () => number }> = {
+  "Heavy Rain": { severity: "High", impactFn: () => "Estimated 3-hour delivery disruption", payout: () => 350 + Math.floor(Math.random() * 150) },
+  "AQI Spike": { severity: "Medium", impactFn: () => `AQI crossed ${300 + Math.floor(Math.random() * 100)} — delivery slowdown expected`, payout: () => 200 + Math.floor(Math.random() * 120) },
+  "Platform Outage": { severity: "High", impactFn: () => `${30 + Math.floor(Math.random() * 30)} mins downtime — orders halted`, payout: () => 250 + Math.floor(Math.random() * 100) },
 };
 
 let claimCounter = 900;
@@ -67,20 +82,33 @@ export default function Dashboard() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [simulating, setSimulating] = useState<string | null>(null);
 
-  const totalPayouts = claims.filter(c => c.status === "Paid" || c.status === "Auto-Approved" || c.status === "Payout Processed").reduce((s, c) => s + c.amount, 0);
+  // Load user & policy from localStorage
+  const [user, setUser] = useState<UserData | null>(null);
+  const [policy, setPolicy] = useState<PolicyData | null>(null);
+
+  useEffect(() => {
+    try {
+      const u = localStorage.getItem("suraksha_user");
+      if (u) setUser(JSON.parse(u));
+      const p = localStorage.getItem("suraksha_policy");
+      if (p) setPolicy(JSON.parse(p));
+    } catch {}
+  }, []);
+
+  const totalPayouts = claims.filter(c => c.status === "Paid" || c.status === "Auto-Approved").reduce((s, c) => s + c.amount, 0);
 
   const simulateTrigger = useCallback((type: string) => {
     if (simulating) return;
     setSimulating(type);
     const cfg = triggerConfigs[type];
-    const zone = zones[Math.floor(Math.random() * zones.length)];
+    const zone = user?.zone || zones[Math.floor(Math.random() * zones.length)];
     const alertId = Date.now();
     const payoutAmt = cfg.payout();
     claimCounter++;
     const claimId = `CLM-2026-${String(claimCounter).padStart(4, "0")}`;
 
     // Step 1: Add alert
-    const newAlert: Alert = { id: alertId, type, zone, severity: cfg.severity, timestamp: now(), impact: cfg.impact, status: "active" };
+    const newAlert: Alert = { id: alertId, type, zone, severity: cfg.severity, timestamp: now(), impact: cfg.impactFn(), status: "active" };
     setAlerts(prev => [newAlert, ...prev]);
 
     // Step 2: Create claim after 1s
@@ -99,22 +127,30 @@ export default function Dashboard() {
         }, 2000);
       }, 2000);
     }, 1000);
-  }, [simulating]);
+  }, [simulating, user]);
 
-  const recentTriggerCount = alerts.filter(a => a.type === "Heavy Rain").length;
+  const recentRainCount = alerts.filter(a => a.type === "Heavy Rain").length;
   const riskLevel = alerts.length >= 3 ? "High" : alerts.length >= 1 ? "Medium" : "Low";
+
+  const displayName = user?.name || "Ravi Kumar";
+  const displayPlatform = user?.platform ? user.platform.charAt(0).toUpperCase() + user.platform.slice(1) : "Zomato";
+  const displayZone = user?.zone || "Kukatpally, Hyderabad";
+  const activePlan = policy?.planName || "Standard Protection";
+  const weeklyPremium = policy?.premium || 49;
 
   return (
     <div className="min-h-screen py-10">
       <div className="container">
         <motion.div initial="hidden" animate="show" variants={fade}>
           <h1 className="font-display text-2xl font-bold md:text-3xl">Worker Dashboard</h1>
-          <p className="mt-1 text-muted-foreground">Ravi Kumar · Zomato · Kukatpally, Hyderabad</p>
+          <p className="mt-1 text-muted-foreground flex items-center gap-1.5">
+            <User className="h-4 w-4" /> {displayName} · {displayPlatform} · {displayZone}
+          </p>
         </motion.div>
 
         <motion.div initial="hidden" animate="show" variants={stagger} className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <motion.div variants={fade}><StatCard title="Active Plan" value="Standard" icon={Shield} /></motion.div>
-          <motion.div variants={fade}><StatCard title="Weekly Premium" value="₹49" icon={IndianRupee} /></motion.div>
+          <motion.div variants={fade}><StatCard title="Active Plan" value={activePlan.replace(" Protection", "")} icon={Shield} /></motion.div>
+          <motion.div variants={fade}><StatCard title="Weekly Premium" value={`₹${weeklyPremium}`} icon={IndianRupee} /></motion.div>
           <motion.div variants={fade}><StatCard title="Total Payouts" value={`₹${totalPayouts.toLocaleString("en-IN")}`} icon={TrendingUp} trend={claims.length > 0 ? `${claims.length} claim(s) this session` : undefined} trendUp /></motion.div>
           <motion.div variants={fade}><StatCard title="Claims Filed" value={claims.length} icon={CheckCircle2} /></motion.div>
         </motion.div>
@@ -128,7 +164,9 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="font-display font-semibold text-success">Protected This Week</p>
-                <p className="text-sm text-muted-foreground">Coverage active until Sunday, 23 Mar 2026 · Auto-renews weekly</p>
+                <p className="text-sm text-muted-foreground">
+                  {activePlan} · ₹{weeklyPremium}/week · Auto-renews weekly
+                </p>
               </div>
             </div>
           </div>
@@ -295,20 +333,20 @@ export default function Dashboard() {
               </div>
               <p className="mt-3 text-sm leading-relaxed">
                 {alerts.length === 0 ? (
-                  <>Your zone currently shows <span className="font-semibold">low disruption activity</span>. Continue your <span className="font-semibold">Standard Plan</span> for uninterrupted coverage.</>
+                  <>Your zone currently shows <span className="font-semibold">low disruption activity</span>. Continue your <span className="font-semibold">{activePlan}</span> for uninterrupted coverage.</>
                 ) : (
                   <>
                     <span className="font-semibold">{alerts.length} disruption(s)</span> detected this session. Zone risk is <span className="font-semibold">{riskLevel}</span>.
-                    {recentTriggerCount >= 2
+                    {recentRainCount >= 2
                       ? <> Consider upgrading to <span className="font-semibold">High Protection</span> for maximum coverage.</>
-                      : <> We recommend continuing your <span className="font-semibold">Standard Plan</span>.</>
+                      : <> We recommend continuing your <span className="font-semibold">{activePlan}</span>.</>
                     }
                   </>
                 )}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">Based on recent triggers + zone risk analysis</p>
               <Button size="sm" className="mt-4 bg-gradient-primary text-primary-foreground hover:opacity-90">
-                {recentTriggerCount >= 2 ? "Upgrade to High Plan · ₹79" : "Renew Standard Plan · ₹49"}
+                {recentRainCount >= 2 ? "Upgrade to High Plan · ₹79" : `Renew ${activePlan.replace(" Protection", "")} Plan · ₹${weeklyPremium}`}
               </Button>
             </motion.div>
           </div>
