@@ -26,6 +26,22 @@ export default function Onboarding() {
     }
   };
 
+  const handleSubmit = () => {
+    // Store user data in localStorage
+    const userData = {
+      name: form.name,
+      mobile: form.mobile,
+      platform: form.platform,
+      zone: form.zone,
+      slots: form.slots,
+      income: form.income,
+      payout: form.payout,
+      registeredAt: new Date().toISOString(),
+    };
+    localStorage.setItem("suraksha_user", JSON.stringify(userData));
+    navigate("/plans");
+  };
+
   return (
     <div className="min-h-screen py-10">
       <div className="container">
@@ -94,7 +110,7 @@ export default function Onboarding() {
                   className="mt-6 w-full bg-gradient-primary text-primary-foreground hover:opacity-90"
                   size="lg"
                   disabled={!filled}
-                  onClick={() => navigate("/plans")}
+                  onClick={handleSubmit}
                 >
                   View Recommended Plans <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
